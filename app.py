@@ -1,494 +1,170 @@
-
-import re
-from pathlib import Path
-
-import pandas as pd
 import streamlit as st
+import pandas as pd
+from datetime import datetime
+from pathlib import Path
+import re
 
+ROOT = Path(__file__).parent
+DATA = ROOT / "enquiries.csv"
+st.set_page_config(page_title="Aevyron | Smart Enquiry Triage", page_icon="✳", layout="wide")
 
-# --------------------------------------------------
-# 1. APP CONFIGURATION
-# --------------------------------------------------
-
-st.set_page_config(
-    page_title="Nexonic | Smart Enquiry Triage",
-    page_icon="📩",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# --------------------------------------------------
-# NEXONIC BRANDING AND UI STYLES
-# --------------------------------------------------
-st.markdown(
-    """
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-      :root { --nx-bg: #100D24; --nx-purple: #8B5CF6; --nx-cyan: #45E5E0; --nx-text: #F5F3FF; }
-      .stApp { background: linear-gradient(135deg, #100D24 0%, #17112F 55%, #100D24 100%); color: var(--nx-text); }
-      html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-      .block-container { max-width: 1120px; padding-top: 2rem; padding-bottom: 3rem; }
-      .nx-header { display:flex; align-items:center; gap:16px; padding:20px 24px; margin-bottom:22px;
-        border:1px solid rgba(139,92,246,.35); border-radius:22px;
-        background:linear-gradient(115deg, rgba(139,92,246,.17), rgba(69,229,224,.055)); }
-      .nx-logo { width:58px; height:58px; flex:0 0 58px; }
-      .nx-brand { font-size:27px; font-weight:800; letter-spacing:3px; color:#fff; line-height:1.2; }
-      .nx-tagline { color:#B7A0FF; font-size:13px; margin-top:5px; letter-spacing:.3px; }
-      .nx-title { font-size:30px; font-weight:750; color:#fff; margin:8px 0 4px; }
-      .nx-subtitle { color:#C5BEDB; font-size:15px; margin-bottom:20px; }
-      [data-testid="stForm"], [data-testid="stDataFrame"], [data-testid="stMetric"] {
-        border:1px solid rgba(183,160,255,.18); border-radius:16px; }
-      [data-testid="stForm"] { background:rgba(255,255,255,.035); padding:22px; }
-      [data-testid="stMetric"] { background:rgba(139,92,246,.10); padding:16px; }
-      [data-testid="stMetricValue"] { color:#fff; }
-      h1, h2, h3, p, label { color:var(--nx-text); }
-      div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {
-        background:linear-gradient(90deg, #8B5CF6, #6D4AE8); color:white; border:0;
-        border-radius:10px; font-weight:650; min-height:44px; }
-      div.stButton > button:hover, div.stFormSubmitButton > button:hover, div.stDownloadButton > button:hover {
-        border:1px solid #45E5E0; color:white; }
-      [data-baseweb="input"] > div, [data-baseweb="textarea"] > div, [data-baseweb="select"] > div {
-        background:#19142F; border-color:#494064; border-radius:10px; }
-      [data-testid="stAlert"] { border-radius:12px; }
-      hr { border-color:rgba(183,160,255,.2); }
-      .nx-footer { text-align:center; color:#A69BBF; font-size:12px; padding-top:12px; }
-    </style>
-    <div class="nx-header">
-      <svg class="nx-logo" viewBox="0 0 100 100" role="img" aria-label="Nexonic connected-node logo">
-        <g stroke="#45E5E0" stroke-width="3" fill="none" stroke-linecap="round">
-          <path d="M20 50 L43 25 L70 37 L78 68 L48 78 Z M43 25 L48 78 M20 50 L70 37"/>
-        </g>
-        <g fill="#8B5CF6" stroke="#B7A0FF" stroke-width="2">
-          <circle cx="20" cy="50" r="7"/><circle cx="43" cy="25" r="7"/>
-          <circle cx="70" cy="37" r="7"/><circle cx="78" cy="68" r="7"/><circle cx="48" cy="78" r="7"/>
-        </g>
-      </svg>
-      <div><div class="nx-brand">NEXONIC</div><div class="nx-tagline">Think smarter. Build beyond.</div></div>
-    </div>
-    <div class="nx-title">Smart Enquiry Triage</div>
-    <div class="nx-subtitle">Organise customer enquiries, suggest priority, and prepare a reply for human review.</div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.info(
-    "Rule-based prototype — this is not a trained AI model. "
-    "Review the category, priority, and draft reply before use."
-)
-
-
-# --------------------------------------------------
-# 2. FILE CONFIGURATION
-# --------------------------------------------------
-
-DATA_FILE = Path("enquiries.csv")
-
-
-# --------------------------------------------------
-# 3. CATEGORY KEYWORDS
-# --------------------------------------------------
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+:root{--bg:#0d0f0e;--panel:#141916;--line:#28352d;--green:#4ade80;--muted:#9aa89e}
+html,body,[class*="css"]{font-family:'DM Sans',sans-serif}
+.stApp{background:radial-gradient(ellipse at 75% 0%,rgba(46,139,87,.13),transparent 38%),var(--bg);color:#f3f7f4}
+.block-container{max-width:1450px;padding-top:1.8rem;padding-bottom:3rem}
+h1,h2,h3{font-family:'Space Grotesk',sans-serif!important;letter-spacing:-.035em}
+[data-testid="stSidebar"]{background:#101612;border-right:1px solid var(--line)}
+[data-testid="stMetric"]{background:linear-gradient(145deg,#17221a,#121714);border:1px solid var(--line);padding:16px;border-radius:16px}
+[data-testid="stMetricLabel"]{color:var(--muted)!important}[data-testid="stMetricValue"]{color:var(--green)!important}
+div[data-testid="stForm"]{background:#141b16;padding:22px;border:1px solid var(--line);border-radius:18px}
+.stTextInput input,.stTextArea textarea,.stSelectbox div[data-baseweb="select"]{background:#0d130f!important;color:#f3f7f4!important;border-color:#34453a!important;border-radius:10px!important}
+.stButton button,.stFormSubmitButton button{background:var(--green)!important;color:#082012!important;border:0!important;border-radius:10px!important;font-weight:700!important;min-height:2.6rem}
+.eyebrow{color:var(--green);font-size:.76rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase}
+.hero{padding:28px;background:linear-gradient(115deg,rgba(28,65,43,.58),rgba(20,25,22,.8));border:1px solid #2c4835;border-radius:22px;margin:16px 0}
+.muted{color:#aab9af}
+.pill{display:inline-block;border:1px solid #315840;background:#102519;color:#86efac;padding:5px 10px;border-radius:999px;font-size:.75rem;font-weight:700}
+</style>
+""", unsafe_allow_html=True)
 
 CATEGORIES = {
-    "Sales": [
-        "price",
-        "pricing",
-        "cost",
-        "buy",
-        "purchase",
-        "quote",
-        "quotation",
-        "plan",
-        "product",
-        "demo",
-        "interested in",
-        "features",
-        "subscription"
-    ],
-
-    "Support": [
-        "error",
-        "issue",
-        "problem",
-        "not working",
-        "help",
-        "bug",
-        "broken",
-        "unable",
-        "failed",
-        "crash",
-        "login",
-        "can't access",
-        "cannot access"
-    ],
-
-    "Billing": [
-        "invoice",
-        "payment",
-        "refund",
-        "charged",
-        "billing",
-        "receipt",
-        "overcharged",
-        "subscription fee"
-    ]
+ "AI & Automation":["ai","automation","chatbot","machine learning","llm","workflow","agent","generative"],
+ "Web Development":["website","web app","web development","frontend","backend","landing page","portal"],
+ "Data & Analytics":["data","analytics","dashboard","power bi","tableau","reporting","sql","visualization"],
+ "Cloud & DevOps":["cloud","aws","azure","gcp","devops","deployment","hosting","infrastructure"],
+ "Mobile App Development":["mobile app","android","ios","flutter","react native","app development"],
+ "Consulting":["consulting","strategy","audit","advice","consultation","discovery"]
 }
+HIGH = ["urgent","asap","immediately","critical","production down","blocked","today","deadline","security issue"]
+MED = ["soon","this week","quotation","quote","proposal","pricing","budget","timeline","meeting","demo"]
+LOW = ["just exploring","exploring","curious","information","learn more","future","not urgent"]
 
+COLUMNS = ["id","created_at","name","email","company","service","message","category","suggested_category","priority","status","reason"]
 
-# --------------------------------------------------
-# 4. URGENCY KEYWORDS
-# --------------------------------------------------
+def load_data():
+    if not DATA.exists(): return pd.DataFrame(columns=COLUMNS)
+    try: return pd.read_csv(DATA).fillna("")
+    except Exception: return pd.DataFrame(columns=COLUMNS)
 
-URGENT_KEYWORDS = [
-    "urgent",
-    "asap",
-    "immediately",
-    "critical",
-    "outage",
-    "system down",
-    "blocked",
-    "deadline today",
-    "cannot work",
-    "can't work"
-]
+def triage(message, service):
+    text = (message or "").lower().strip()
+    if not text: return "Needs Review", "Unassigned", "Low", "No message provided."
+    scores = {c: sum(term in text for term in terms) for c,terms in CATEGORIES.items()}
+    if service in scores: scores[service] += 2
+    ordered = sorted(scores.values(), reverse=True)
+    best = max(scores, key=scores.get)
+    ambiguous = scores[best] == 0 or (len(ordered)>1 and ordered[0] == ordered[1])
+    category = "Needs Review" if ambiguous else best
+    if any(x in text for x in HIGH): priority, reason = "High", "Urgency or risk wording detected."
+    elif any(x in text for x in MED): priority, reason = "Medium", "Timing or buying-intent wording detected."
+    else: priority, reason = "Low", "No strong urgency signal detected; confirm with requester."
+    if ambiguous: reason += " Category is ambiguous or no service keywords matched."
+    return category, best if ambiguous else category, priority, reason
 
+def clean(x): return re.sub(r"\s+"," ",str(x or "")).strip()
 
-# --------------------------------------------------
-# 5. KEYWORD MATCHING FUNCTION
-# --------------------------------------------------
+with st.sidebar:
+    st.markdown('<div class="eyebrow">AEVYRON / OPERATIONS</div>', unsafe_allow_html=True)
+    st.markdown("## ✳ Aevyron")
+    st.caption("Smart Enquiry Triage")
+    page = st.radio("WORKSPACE", ["Overview","New enquiry","Enquiry inbox","How it works"])
+    st.divider()
+    st.markdown('<span class="pill">RULE-BASED ASSISTANCE</span>', unsafe_allow_html=True)
+    st.caption("Suggestions use message keywords. This is not a trained AI model.")
+    st.divider()
+    st.caption("Think smarter. Build beyond.")
 
-def contains_keyword(text: str, keyword: str) -> bool:
-    """
-    Check whether a keyword or phrase appears in the text.
-    Ignore uppercase/lowercase differences and avoid matching
-    a keyword inside a larger word.
-    """
+df = load_data()
+if page == "Overview":
+    st.markdown('<div class="eyebrow">ENQUIRY OPERATIONS / OVERVIEW</div>', unsafe_allow_html=True)
+    st.title("Turn incoming enquiries into clear next steps.")
+    st.markdown('<div class="hero"><span class="pill">SMART ENQUIRY TRIAGE</span><h2 style="margin-top:16px">Less sorting. More meaningful follow-up.</h2><p class="muted">Capture customer enquiries, get transparent category and priority suggestions, and flag ambiguous messages for human review — in one focused workspace.</p></div>', unsafe_allow_html=True)
+    total=len(df); high=int((df["priority"]=="High").sum()) if total else 0
+    review=int((df["category"]=="Needs Review").sum()) if total else 0
+    opened=int((df["status"]=="Open").sum()) if total else 0
+    a,b,c,d=st.columns(4); a.metric("Total enquiries",total); b.metric("High priority",high); c.metric("Needs review",review); d.metric("Open follow-ups",opened)
+    st.markdown("### Recent enquiries")
+    if total: st.dataframe(df.tail(5).iloc[::-1],use_container_width=True,hide_index=True)
+    else: st.info("No enquiries saved yet. Choose **New enquiry** in the sidebar to get started.")
 
-    pattern = r"\b" + re.escape(keyword.lower()) + r"\b"
-
-    return re.search(pattern, text.lower()) is not None
-
-
-# --------------------------------------------------
-# 6. ENQUIRY CATEGORISATION
-# --------------------------------------------------
-
-def categorise(text: str) -> str:
-    """
-    Categorise an enquiry using keyword rules.
-
-    Return Needs Review if:
-    - No category keywords match.
-    - Multiple categories have the same highest score.
-    """
-
-    scores = {
-        category: sum(
-            1
-            for keyword in keywords
-            if contains_keyword(text, keyword)
-        )
-        for category, keywords in CATEGORIES.items()
-    }
-
-    highest_score = max(scores.values())
-
-    # No matching category keywords.
-    if highest_score == 0:
-        return "Needs Review"
-
-    # Find all categories with the highest score.
-    winners = [
-        category
-        for category, score in scores.items()
-        if score == highest_score
-    ]
-
-    # More than one category has the same highest score.
-    if len(winners) > 1:
-        return "Needs Review"
-
-    return winners[0]
-
-
-# --------------------------------------------------
-# 7. PRIORITY SUGGESTION
-# --------------------------------------------------
-
-def suggest_priority(text: str) -> str:
-    """
-    Suggest High when explicit urgency keywords are present.
-    Otherwise suggest Normal.
-
-    This is a keyword-based suggestion, not an AI prediction.
-    """
-
-    if any(
-        contains_keyword(text, keyword)
-        for keyword in URGENT_KEYWORDS
-    ):
-        return "High"
-
-    return "Normal"
-
-
-# --------------------------------------------------
-# 8. DRAFT REPLY GENERATION
-# --------------------------------------------------
-
-def draft_reply(category: str, customer_name: str) -> str:
-    """
-    Prepare a draft reply based on the selected category.
-    The reply is a draft and should be reviewed before sending.
-    """
-
-    name = customer_name.strip() or "there"
-
-    replies = {
-        "Sales": (
-            f"Hi {name}, thanks for your interest. We have received "
-            "your enquiry and will share relevant product and pricing "
-            "details after reviewing your requirements."
-        ),
-
-        "Support": (
-            f"Hi {name}, thanks for reporting this. We have received "
-            "your support enquiry and will review the details. If possible, "
-            "please share the steps that led to the issue."
-        ),
-
-        "Billing": (
-            f"Hi {name}, thanks for contacting us about billing. We have "
-            "received your enquiry and will review the payment or invoice "
-            "details before responding."
-        ),
-
-        "Needs Review": (
-            f"Hi {name}, thanks for contacting us. Our team will review "
-            "your message and route it to the right person before responding."
-        )
-    }
-
-    return replies.get(
-        category,
-        f"Hi {name}, thanks for contacting us. Our team will review your enquiry."
-    )
-
-
-# --------------------------------------------------
-# 9. LOAD EXISTING CSV DATA
-# --------------------------------------------------
-
-def load_enquiries() -> pd.DataFrame:
-    """
-    Load existing enquiries from the CSV file.
-    Return an empty DataFrame if the file does not exist.
-    """
-
-    if DATA_FILE.exists():
-        try:
-            return pd.read_csv(DATA_FILE)
-        except (pd.errors.EmptyDataError, pd.errors.ParserError):
-            st.warning(
-                "The existing CSV file could not be read. "
-                "A new file will be created when you save an enquiry."
-            )
-
-    return pd.DataFrame()
-
-
-# --------------------------------------------------
-# 10. CUSTOMER ENQUIRY FORM
-# --------------------------------------------------
-
-st.subheader("📩  Customer Enquiry Form")
-
-with st.form("enquiry_form"):
-
-    customer_name = st.text_input(
-        "Customer Name",
-        placeholder="Enter customer name"
-    )
-
-    customer_email = st.text_input(
-        "Customer Email",
-        placeholder="customer@example.com"
-    )
-
-    message = st.text_area(
-        "Customer Message",
-        placeholder="Enter the customer's enquiry here..."
-    )
-
-    priority_choice = st.selectbox(
-        "Priority",
-        ["Auto-suggest", "Normal", "High"],
-        index=0
-    )
-
-    submitted = st.form_submit_button(
-        "Analyse and Save Enquiry",
-        use_container_width=True
-    )
-
-
-# --------------------------------------------------
-# 11. PROCESS AND SAVE ENQUIRY
-# --------------------------------------------------
-
-if submitted:
-
-    if not customer_name.strip():
-        st.error("Please enter the customer's name.")
-
-    elif not customer_email.strip():
-        st.error("Please enter the customer's email.")
-
-    elif not message.strip():
-        st.error("Please enter the customer's message.")
-
-    else:
-        # Determine category and suggested priority.
-        category = categorise(message)
-        suggested_priority = suggest_priority(message)
-
-        # Use the automatic suggestion or manual selection.
-        if priority_choice == "Auto-suggest":
-            priority = suggested_priority
+elif page == "New enquiry":
+    st.markdown('<div class="eyebrow">CAPTURE / CLASSIFY / FOLLOW UP</div>', unsafe_allow_html=True)
+    st.title("New enquiry")
+    st.write("Suggestions are generated locally using transparent keyword rules.")
+    with st.form("enquiry_form", clear_on_submit=False):
+        x,y=st.columns(2)
+        with x:
+            name=st.text_input("Contact name *",placeholder="e.g. Priya Sharma")
+            email=st.text_input("Work email *",placeholder="name@company.com")
+            company=st.text_input("Company",placeholder="Company name")
+        with y:
+            service=st.selectbox("Service of interest",["Not specified",*CATEGORIES.keys()])
+            status=st.selectbox("Follow-up status",["Open","In progress","Closed"])
+        message=st.text_area("Enquiry message *",placeholder="Tell us what you need help with...",height=150)
+        submitted=st.form_submit_button("Triage and save enquiry",use_container_width=True)
+    if submitted:
+        errors=[]
+        if not clean(name): errors.append("Contact name is required.")
+        if not re.match(r"^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",email.strip()): errors.append("Enter a valid email address.")
+        if not clean(message): errors.append("Enquiry message is required.")
+        if errors:
+            for e in errors: st.error(e)
         else:
-            priority = priority_choice
+            category,suggested,priority,reason=triage(message,service)
+            record={"id":"AEV-"+datetime.now().strftime("%y%m%d%H%M%S"),"created_at":datetime.now().isoformat(timespec="seconds"),"name":clean(name),"email":email.strip(),"company":clean(company),"service":service,"message":clean(message),"category":category,"suggested_category":suggested,"priority":priority,"status":status,"reason":reason}
+            pd.concat([load_data(),pd.DataFrame([record])],ignore_index=True).to_csv(DATA,index=False)
+            st.session_state["last_result"]=record
+            st.success("Enquiry triaged and saved to enquiries.csv.")
+    if st.session_state.get("last_result"):
+        r=st.session_state["last_result"]
+        st.markdown("### Triage result")
+        a,b,c=st.columns(3); a.metric("Suggested category",r["category"]); b.metric("Suggested priority",r["priority"]); c.metric("Follow-up status",r["status"])
+        st.info(r["reason"])
+        if r["category"]=="Needs Review": st.warning("Human review recommended. Initial category hint: "+r["suggested_category"])
 
-        # Create the enquiry record.
-        record = {
-            "customer_name": customer_name.strip(),
-            "customer_email": customer_email.strip(),
-            "message": message.strip(),
-            "category": category,
-            "priority": priority,
-            "suggested_priority": suggested_priority,
-            "status": (
-                "Needs human review"
-                if category == "Needs Review"
-                else "Needs human review before sending reply"
-            ),
-            "draft_reply": draft_reply(
-                category,
-                customer_name
-            )
-        }
-
-        # Save the enquiry to CSV while preserving previous records.
-        try:
-            existing_data = load_enquiries()
-
-            new_record = pd.DataFrame([record])
-
-            if existing_data.empty:
-                updated_data = new_record
-            else:
-                # Keep existing columns and add new fields if needed.
-                updated_data = pd.concat(
-                    [existing_data, new_record],
-                    ignore_index=True
-                )
-
-            updated_data.to_csv(DATA_FILE, index=False)
-
-            st.success("Enquiry analysed and saved successfully!")
-
-            # Show results.
-            st.subheader("✨  Enquiry Analysis")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.metric(
-                    "Category",
-                    record["category"]
-                )
-
-            with col2:
-                st.metric(
-                    "Selected Priority",
-                    record["priority"]
-                )
-
-            st.caption(
-                f"Rule-based priority suggestion: "
-                f"{record['suggested_priority']}"
-            )
-
-            if category == "Needs Review":
-                st.warning(
-                    "This message could not be categorised confidently "
-                    "using the current keyword rules. Please review it manually."
-                )
-
-            st.write("**Review Status:**", record["status"])
-
-            st.subheader("💬  Draft Reply")
-
-            st.text_area(
-                "Review this draft before sending",
-                value=record["draft_reply"],
-                height=150,
-                key="latest_draft_reply"
-            )
-
-            st.caption(
-                "The application does not send emails. "
-                "Copy and review the draft before using it."
-            )
-
-        except (OSError, PermissionError) as error:
-            st.error(
-                f"Could not save the CSV file. "
-                f"Check whether the file is open in Excel. Details: {error}"
-            )
-
-
-# --------------------------------------------------
-# 12. DISPLAY SAVED ENQUIRIES
-# --------------------------------------------------
-
-st.divider()
-
-st.subheader("🗂️  Saved Enquiries")
-
-saved_data = load_enquiries()
-
-if not saved_data.empty:
-
-    st.dataframe(
-        saved_data,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    # Download the saved records.
-    csv_data = saved_data.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        label="Download Enquiries CSV",
-        data=csv_data,
-        file_name="nexonic_enquiries.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
+elif page == "Enquiry inbox":
+    st.markdown('<div class="eyebrow">OPERATIONS / INBOX</div>', unsafe_allow_html=True)
+    st.title("Enquiry inbox")
+    st.caption("Saved records are stored in enquiries.csv beside the app.")
+    if df.empty: st.info("Inbox is empty. Create an enquiry first.")
+    else:
+        a,b,c=st.columns(3)
+        cat=a.selectbox("Category",["All",*sorted(df["category"].astype(str).unique())])
+        pri=b.selectbox("Priority",["All","High","Medium","Low"])
+        status=c.selectbox("Status",["All",*sorted(df["status"].astype(str).unique())])
+        view=df.copy()
+        if cat!="All": view=view[view.category==cat]
+        if pri!="All": view=view[view.priority==pri]
+        if status!="All": view=view[view.status==status]
+        st.caption(f"{len(view)} matching enquiry/enquiries")
+        st.dataframe(view,use_container_width=True,hide_index=True)
+        st.download_button("Download filtered enquiries (CSV)",view.to_csv(index=False).encode("utf-8"),"aevyron_enquiries.csv","text/csv")
+        with st.expander("Update follow-up status"):
+            chosen=st.selectbox("Enquiry ID",view["id"].astype(str).tolist())
+            new_status=st.selectbox("New status",["Open","In progress","Closed"])
+            if st.button("Save status change"):
+                all_df=load_data(); all_df.loc[all_df.id.astype(str)==chosen,"status"]=new_status
+                all_df.to_csv(DATA,index=False); st.success("Status updated."); st.rerun()
 else:
-    st.info(
-        "No enquiries have been saved yet. "
-        "Submit the form above to create your first record."
-    )
+    st.markdown('<div class="eyebrow">TRANSPARENCY / OPERATING NOTES</div>', unsafe_allow_html=True)
+    st.title("How the triage works")
+    st.markdown("""
+**Category suggestion**  
+The app checks for keywords related to AI & Automation, Web Development, Data & Analytics, Cloud & DevOps, Mobile App Development, and Consulting. If no category is clear or multiple categories tie, it flags the enquiry as **Needs Review**.
 
+**Priority suggestion**
+- **High:** urgency or risk terms such as “urgent”, “ASAP”, “critical”, or “production down”.
+- **Medium:** purchase-intent or timing terms such as “proposal”, “pricing”, “this week”, or “demo”.
+- **Low:** no strong urgency signal detected; a person should confirm the actual deadline and impact.
 
-# --------------------------------------------------
-# 13. FOOTER
-# --------------------------------------------------
+**Human review**  
+Category and priority are suggestions, not decisions. Review the message before taking action.
 
-st.divider()
+**Storage and privacy**  
+This starter app saves records to a local `enquiries.csv`. Hosted local files may not persist across restarts or redeployments. Use a persistent database and access controls before collecting real customer data.
 
-st.markdown(
-    '<div class="nx-footer">NEXONIC &nbsp;•&nbsp; Think smarter. Build beyond. &nbsp;•&nbsp; Rule-based prototype — human review required.</div>',
-    unsafe_allow_html=True
-)
+**Limitation**  
+This version uses keyword rules, not a trained machine-learning model or external LLM. It does not send emails or automatically contact customers.
+""")
