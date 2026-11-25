@@ -1,0 +1,3 @@
+customer_name,customer_email,message,category,priority,suggested_priority,status,draft_reply
+new1,new@gm.com,I'm interested in your product. Can you share the pricing plans?,Sales,Normal,Normal,Needs human review before sending reply,"Hi new1, thanks for your interest. We have received your enquiry and will share relevant product and pricing details after reviewing your requirements."
+new2,new2@gm.com,The application has an error and is not working.,Support,Normal,Normal,Needs human review before sending reply,"Hi new2, thanks for reporting this. We have received your support enquiry and will review the details. If possible, please share the steps that led to the issue."
